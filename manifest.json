@@ -1,0 +1,25 @@
+{
+  "id": "8f7f0d9e-2d6c-4d75-9d0f-3f6c2f1f8a21",
+  "version": "0.1.5",
+  "platform": "all",
+  "arch": "all",
+  "name": "AI Video Tagger",
+  "logo": "/logo.png",
+  "keywords": ["video", "ai", "tag"],
+  "dependencies": ["ai-sdk", "ffmpeg"],
+  "main": {
+    "url": "index.html",
+    "show": false,
+    "width": 380,
+    "height": 420,
+    "minWidth": 380,
+    "minHeight": 420,
+    "maxWidth": 380,
+    "maxHeight": 420,
+    "resizable": false,
+    "minimizable": false,
+    "maximizable": false,
+    "fullscreenable": false,
+    "backgroundColor": "#fbfbfc"
+  }
+}

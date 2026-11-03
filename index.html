@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Video Tagger</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #fbfbfc;
+      --surface: #ffffff;
+      --text: #252a34;
+      --muted: #6e7581;
+      --track: #e9ebf0;
+      --accent: #5276e5;
+      --success: #39896b;
+      --error: #c26a51;
+      --button-text: #ffffff;
+      --border: #e8eaf0;
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+    button:disabled { opacity: .45; cursor: default; }
+
+    .app {
+      min-height: 100%;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 25px;
+      --ring-color: var(--accent);
+    }
+    .app[data-state="success"] { --ring-color: var(--success); }
+    .app[data-state="error"] { --ring-color: var(--error); }
+    .progress {
+      width: 232px;
+      height: 232px;
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .progress svg { width: 100%; height: 100%; overflow: visible; }
+    .ring-track, .ring-value, .ring-orbit circle { fill: none; stroke-width: 5; }
+    .ring-track { stroke: var(--track); }
+    .ring-value {
+      stroke: var(--ring-color);
+      stroke-linecap: round;
+      stroke-dasharray: 100;
+      stroke-dashoffset: 100;
+      transition: stroke-dashoffset .45s ease, stroke .25s ease;
+    }
+    .ring-orbit { display: none; transform-origin: 116px 116px; animation: orbit 3s linear infinite; }
+    .ring-orbit circle { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 12 88; opacity: .32; }
+    .app[data-state="processing"] .ring-orbit { display: block; }
+    .ring-center {
+      position: absolute;
+      inset: 38px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+    }
+    .status-text { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 550; letter-spacing: .02em; }
+    .status-hint {
+      width: 100%;
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow-wrap: anywhere;
+    }
+    .result { color: var(--muted); font-size: 13px; line-height: 1.8; }
+    .result p { margin: 0; }
+    .result-count { color: var(--text); font-size: 24px; font-weight: 500; margin-right: 4px; font-variant-numeric: tabular-nums; }
+    .result-breakdown { font-size: 11px; }
+    .actions { display: flex; align-items: center; justify-content: center; height: 42px; }
+    .action-button {
+      min-width: 156px;
+      height: 42px;
+      padding: 0 25px;
+      border-radius: 24px;
+      border: 1px solid transparent;
+      background: var(--accent);
+      color: var(--button-text);
+      font-size: 13px;
+      font-weight: 500;
+      transition: background .2s ease, opacity .2s ease;
+    }
+    .action-button:hover { filter: brightness(.96); }
+    .cancel-button { background: transparent; border-color: var(--border); color: var(--muted); }
+    .footnote { height: 20px; margin-top: -13px; }
+    .text-button { padding: 2px 5px; border: 0; background: transparent; color: var(--muted); font-size: 11px; }
+    .text-button:hover { color: var(--text); }
+
+    .error-dialog {
+      width: min(320px, calc(100vw - 36px));
+      max-height: calc(100vh - 48px);
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 16px 60px #00000016;
+    }
+    .error-dialog::backdrop { background: #171d2b30; }
+    .error-dialog h2 { margin: 0 0 16px; font-size: 15px; font-weight: 550; }
+    .error-dialog pre { max-height: 190px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 12px; line-height: 1.8; color: var(--muted); margin: 0 0 18px; }
+    .error-dialog form { display: flex; justify-content: flex-end; }
+    .dialog-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    @keyframes orbit { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .ring-orbit { animation: none; } .ring-value { transition: none; } }
+    @media (max-height: 350px) { .app { padding: 16px; gap: 15px; } .progress { width: 210px; height: 210px; } }
+  </style>
+</head>
+<body>
+  <main class="app" id="app" data-state="idle">
+    <div class="progress">
+      <svg id="progressRing" viewBox="0 0 232 232" role="progressbar" aria-label="视频处理进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="正在准备">
+        <circle class="ring-track" cx="116" cy="116" r="104" />
+        <circle class="ring-value" id="progressValue" cx="116" cy="116" r="104" pathLength="100" transform="rotate(-90 116 116)" />
+        <g class="ring-orbit"><circle cx="116" cy="116" r="104" pathLength="100" transform="rotate(-90 116 116)" /></g>
+      </svg>
+      <div class="ring-center" role="status" aria-live="polite" aria-atomic="true">
+        <p class="status-text" id="statusText">正在准备</p>
+        <p class="status-hint" id="statusHint">请稍等片刻</p>
+        <div class="result" id="resultSummary" hidden>
+          <p><span class="result-count" id="videoCount">0</span>个视频</p>
+          <p class="result-breakdown" id="resultBreakdown" hidden><span id="successCount">0</span> 成功 · <span id="failedCount">0</span> 失败</p>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="action-button" id="runBtn" type="button" disabled>正在准备</button>
+      <button class="action-button cancel-button" id="cancelBtn" type="button" hidden disabled>取消</button>
+    </div>
+    <div class="footnote"><button class="text-button" id="detailsBtn" type="button" hidden>查看原因</button></div>
+  </main>
+  <dialog class="error-dialog" id="errorDialog" aria-labelledby="errorTitle">
+    <h2 id="errorTitle">需要检查</h2>
+    <pre id="errorText"></pre>
+    <div class="dialog-actions">
+      <button class="text-button" id="modelSettingsBtn" type="button" hidden>打开模型设置</button>
+      <form method="dialog"><button class="text-button" autofocus>知道了</button></form>
+    </div>
+  </dialog>
+  <script>
+    (() => {
+      let reported = false;
+      let nativeReady = false;
+      let recoveryTask = null;
+      async function showStartupRecovery() {
+        if (!reported || !nativeReady || recoveryTask) return recoveryTask;
+        recoveryTask = (async () => {
+          try { await eagle.window.setSize(380, 420); }
+          catch (error) { console.warn(error); }
+          try { await eagle.window.show(); }
+          catch (error) { console.warn(error); }
+        })();
+        await recoveryTask;
+        recoveryTask = null;
+      }
+      function reportStartupError(message) {
+        if (reported || window.AIVideoTaggerStarted) return;
+        reported = true;
+        document.getElementById("app").dataset.state = "error";
+        document.getElementById("statusText").textContent = "启动失败";
+        document.getElementById("progressRing").setAttribute("aria-valuetext", "启动失败");
+        document.getElementById("statusHint").textContent = "点击下方查看原因";
+        document.getElementById("runBtn").disabled = true;
+        document.getElementById("runBtn").textContent = "暂时不可用";
+        document.getElementById("errorText").textContent = "插件没有正常打开。\n请在 Eagle 中重新加载或更新本插件，再试一次。";
+        console.error("插件启动失败：", message);
+        const details = document.getElementById("detailsBtn");
+        details.hidden = false;
+        details.addEventListener("click", () => document.getElementById("errorDialog").showModal());
+        showStartupRecovery();
+      }
+      window.addEventListener("error", event => {
+        const target = event.target;
+        if (target && target.tagName === "SCRIPT") {
+          reportStartupError("无法加载脚本：" + target.getAttribute("src"));
+        } else {
+          reportStartupError(event.message || "插件初始化失败");
+        }
+      }, true);
+      window.addEventListener("unhandledrejection", event => {
+        reportStartupError(String(event.reason && event.reason.message || event.reason));
+      });
+      // This guard also runs when a later script is missing, so a hidden native
+      // window can still display its startup error instead of never opening.
+      if (typeof eagle !== "undefined" && typeof eagle.onPluginCreate === "function") {
+        eagle.onPluginCreate(() => { nativeReady = true; return showStartupRecovery(); });
+        if (typeof eagle.onPluginRun === "function") eagle.onPluginRun(showStartupRecovery);
+      }
+    })();
+  </script>
+  <script src="./core.js"></script>
+  <script src="./main.js"></script>
+</body>
+</html>
